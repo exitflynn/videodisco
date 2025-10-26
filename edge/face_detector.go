@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"image"
 	"sort"
+	"strings"
 
 	ort "github.com/yalue/onnxruntime_go"
 )
@@ -18,47 +19,82 @@ type Face struct {
 }
 
 type FaceDetector struct {
-	session      *ort.Session[float32]
-	inputShape   ort.Shape
-	outputShape  ort.Shape
-	inputTensor  *ort.Tensor[float32]
-	outputTensor *ort.Tensor[float32]
+	session       *ort.Session[float32]
+	inputShape    ort.Shape
+	inputTensor   *ort.Tensor[float32]
+	outputTensors []*ort.Tensor[float32]
 }
 
 func NewFaceDetector(modelPath string) (*FaceDetector, error) {
-	inputShape := ort.NewShape(1, 3, 320, 320)
-	outputShape := ort.NewShape(1, 5600, 14)
+	inputShape := ort.NewShape(1, 3, 640, 640)
 
 	inputTensor, err := ort.NewEmptyTensor[float32](inputShape)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create input tensor: %w", err)
 	}
 
-	outputTensor, err := ort.NewEmptyTensor[float32](outputShape)
-	if err != nil {
-		inputTensor.Destroy()
-		return nil, fmt.Errorf("failed to create output tensor: %w", err)
+	outputTensors := make([]*ort.Tensor[float32], 9)
+	outputNames := []string{"cls_8", "cls_16", "cls_32", "obj_8", "obj_16", "obj_32", "bbox_8", "bbox_16", "bbox_32"}
+
+	for i, name := range outputNames {
+		var outputShape ort.Shape
+		if strings.Contains(name, "_8") {
+			if strings.Contains(name, "cls") || strings.Contains(name, "obj") {
+				outputShape = ort.NewShape(1, 6400, 1)
+			} else if strings.Contains(name, "bbox") {
+				outputShape = ort.NewShape(1, 6400, 4)
+			} else {
+				outputShape = ort.NewShape(1, 6400, 10)
+			}
+		} else if strings.Contains(name, "_16") {
+			if strings.Contains(name, "cls") || strings.Contains(name, "obj") {
+				outputShape = ort.NewShape(1, 1600, 1)
+			} else if strings.Contains(name, "bbox") {
+				outputShape = ort.NewShape(1, 1600, 4)
+			} else {
+				outputShape = ort.NewShape(1, 1600, 10)
+			}
+		} else if strings.Contains(name, "_32") {
+			if strings.Contains(name, "cls") || strings.Contains(name, "obj") {
+				outputShape = ort.NewShape(1, 400, 1)
+			} else if strings.Contains(name, "bbox") {
+				outputShape = ort.NewShape(1, 400, 4)
+			} else {
+				outputShape = ort.NewShape(1, 400, 10)
+			}
+		}
+
+		tensor, err := ort.NewEmptyTensor[float32](outputShape)
+		if err != nil {
+			for j := 0; j < i; j++ {
+				outputTensors[j].Destroy()
+			}
+			inputTensor.Destroy()
+			return nil, fmt.Errorf("failed to create output tensor %d: %w", i, err)
+		}
+		outputTensors[i] = tensor
 	}
 
 	session, err := ort.NewSession[float32](
 		modelPath,
 		[]string{"input"},
-		[]string{"output"},
+		outputNames,
 		[]*ort.Tensor[float32]{inputTensor},
-		[]*ort.Tensor[float32]{outputTensor},
+		outputTensors,
 	)
 	if err != nil {
 		inputTensor.Destroy()
-		outputTensor.Destroy()
+		for _, tensor := range outputTensors {
+			tensor.Destroy()
+		}
 		return nil, fmt.Errorf("failed to create session: %w", err)
 	}
 
 	return &FaceDetector{
-		session:      session,
-		inputShape:   inputShape,
-		outputShape:  outputShape,
-		inputTensor:  inputTensor,
-		outputTensor: outputTensor,
+		session:       session,
+		inputShape:    inputShape,
+		inputTensor:   inputTensor,
+		outputTensors: outputTensors,
 	}, nil
 }
 
@@ -75,8 +111,12 @@ func (fd *FaceDetector) Detect(img image.Image, confThreshold float32) ([]Face, 
 		return nil, fmt.Errorf("inference failed: %w", err)
 	}
 
-	output := fd.outputTensor.GetData()
-	faces := decodeFaces(output, confThreshold)
+	faces := []Face{}
+	for _, outputTensor := range fd.outputTensors {
+		output := outputTensor.GetData()
+		decoded := decodeFaces(output, confThreshold)
+		faces = append(faces, decoded...)
+	}
 	faces = nms(faces, 0.4)
 
 	return faces, nil
@@ -91,8 +131,19 @@ func (fd *FaceDetector) Close() {
 func decodeFaces(output []float32, confThreshold float32) []Face {
 	faces := []Face{}
 
-	for i := 0; i < 5600; i++ {
-		offset := i * 14
+	// YuNet outputs are flattened as: each detection has center_x, center_y, w, h as values
+	// With confidence threshold applied
+	// For an Nx14 or Nx4 output format from YuNet
+
+	stride := 14
+	numDetections := len(output) / stride
+
+	for i := 0; i < numDetections; i++ {
+		offset := i * stride
+		if offset+4 > len(output) {
+			break
+		}
+
 		x := output[offset]
 		y := output[offset+1]
 		w := output[offset+2]
@@ -103,28 +154,27 @@ func decodeFaces(output []float32, confThreshold float32) []Face {
 			continue
 		}
 
+		// Convert center + size to corner coordinates
 		x1 := x - w/2
 		y1 := y - h/2
 		x2 := x + w/2
 		y2 := y + h/2
 
-		x1 = (x1 + 0.5) * 320
-		y1 = (y1 + 0.5) * 320
-		x2 = (x2 + 0.5) * 320
-		y2 = (y2 + 0.5) * 320
+		// Clamp to valid range [0, 640]
+		x1 = max(0, min(640, x1))
+		y1 = max(0, min(640, y1))
+		x2 = max(0, min(640, x2))
+		y2 = max(0, min(640, y2))
 
-		x1 = max(0, x1)
-		y1 = max(0, y1)
-		x2 = min(320, x2)
-		y2 = min(320, y2)
-
-		faces = append(faces, Face{
-			X1:    x1,
-			Y1:    y1,
-			X2:    x2,
-			Y2:    y2,
-			Score: conf,
-		})
+		if x2-x1 > 10 && y2-y1 > 10 { // Filter tiny boxes
+			faces = append(faces, Face{
+				X1:    x1,
+				Y1:    y1,
+				X2:    x2,
+				Y2:    y2,
+				Score: conf,
+			})
+		}
 	}
 
 	return faces
@@ -193,20 +243,20 @@ func preprocessFaceDetector(img image.Image) ([]float32, error) {
 	bounds := img.Bounds()
 	w, h := bounds.Dx(), bounds.Dy()
 
-	scale := min(float32(320)/float32(w), float32(320)/float32(h))
+	scale := min(float32(640)/float32(w), float32(640)/float32(h))
 	newW := int(float32(w) * scale)
 	newH := int(float32(h) * scale)
 
-	padW := (320 - newW) / 2
-	padH := (320 - newH) / 2
+	padW := (640 - newW) / 2
+	padH := (640 - newH) / 2
 
-	data := make([]float32, 3*320*320)
+	data := make([]float32, 3*640*640)
 
 	srcX := bounds.Min.X
 	srcY := bounds.Min.Y
 
-	for y := 0; y < 320; y++ {
-		for x := 0; x < 320; x++ {
+	for y := 0; y < 640; y++ {
+		for x := 0; x < 640; x++ {
 			ox := x - padW
 			oy := y - padH
 
@@ -219,9 +269,9 @@ func preprocessFaceDetector(img image.Image) ([]float32, error) {
 				b = float32(cb>>8) / 255.0
 			}
 
-			data[0*320*320+y*320+x] = r
-			data[1*320*320+y*320+x] = g
-			data[2*320*320+y*320+x] = b
+			data[0*640*640+y*640+x] = r
+			data[1*640*640+y*640+x] = g
+			data[2*640*640+y*640+x] = b
 		}
 	}
 

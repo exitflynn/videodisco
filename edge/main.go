@@ -4,6 +4,7 @@ import (
 	"os"
 
 	"github.com/gin-gonic/gin"
+	ort "github.com/yalue/onnxruntime_go"
 	"github.com/zeromicro/go-zero/core/logx"
 )
 
@@ -14,6 +15,12 @@ const (
 )
 
 func main() {
+	ort.SetSharedLibraryPath("/opt/homebrew/lib/libonnxruntime.dylib")
+	err := ort.InitializeEnvironment()
+	if err != nil {
+		logx.Severef("onnxruntime init failed: %v", err)
+	}
+
 	faceDetectorPath := os.Getenv("FACE_DETECTOR_MODEL")
 	if faceDetectorPath == "" {
 		faceDetectorPath = defaultFaceDetectorPath
@@ -30,7 +37,6 @@ func main() {
 	}
 
 	logx.Infof("loading face detector: %s", faceDetectorPath)
-	var err error
 	faceDetector, err = NewFaceDetector(faceDetectorPath)
 	if err != nil {
 		logx.Severef("failed to load face detector: %v", err)

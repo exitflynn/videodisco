@@ -17,7 +17,7 @@ type FaceEmbedder struct {
 
 func NewFaceEmbedder(modelPath string) (*FaceEmbedder, error) {
 	inputShape := ort.NewShape(1, 3, 112, 112)
-	outputShape := ort.NewShape(1, 128)
+	outputShape := ort.NewShape(1, 512)
 
 	inputTensor, err := ort.NewEmptyTensor[float32](inputShape)
 	if err != nil {
@@ -32,8 +32,8 @@ func NewFaceEmbedder(modelPath string) (*FaceEmbedder, error) {
 
 	session, err := ort.NewSession[float32](
 		modelPath,
-		[]string{"input"},
-		[]string{"output"},
+		[]string{"input.1"},
+		[]string{"516"},
 		[]*ort.Tensor[float32]{inputTensor},
 		[]*ort.Tensor[float32]{outputTensor},
 	)
@@ -61,7 +61,7 @@ func (fe *FaceEmbedder) Embed(cropData []float32) ([]float32, error) {
 
 	emb := fe.outputTensor.GetData()
 
-	normalized := make([]float32, 128)
+	normalized := make([]float32, 512)
 	copy(normalized, emb)
 	l2Normalize(normalized)
 
