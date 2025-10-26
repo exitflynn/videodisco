@@ -16,11 +16,11 @@ import (
 var lastFaceMetrics *FaceMetrics
 
 type FaceMetrics struct {
-	ImageName string    `json:"image_name"`
-	NumFaces  int       `json:"num_faces"`
-	LatencyMs float64   `json:"latency_ms"`
-	Faces     []Face    `json:"faces"`
-	Kind      string    `json:"kind"`
+	ImageName string  `json:"image_name"`
+	NumFaces  int     `json:"num_faces"`
+	LatencyMs float64 `json:"latency_ms"`
+	Faces     []Face  `json:"faces"`
+	Kind      string  `json:"kind"`
 }
 
 var faceDetector *FaceDetector
@@ -91,7 +91,7 @@ func handleFaceProcess(c *gin.Context) {
 	logx.Infof("face process complete: %d faces, %.2fms", len(faces), latency)
 
 	c.JSON(http.StatusOK, gin.H{
-		"faces":     faces,
+		"faces":      faces,
 		"latency_ms": latency,
 	})
 }

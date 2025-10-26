@@ -1,0 +1,401 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<title>VideoDisco - Face Detection</title>
+	<style>
+		* {
+			margin: 0;
+			padding: 0;
+			box-sizing: border-box;
+		}
+
+		body {
+			font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+			background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+			min-height: 100vh;
+			display: flex;
+			align-items: center;
+			justify-content: center;
+			padding: 20px;
+		}
+
+		.container {
+			background: white;
+			border-radius: 12px;
+			box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+			max-width: 900px;
+			width: 100%;
+			padding: 40px;
+		}
+
+		h1 {
+			color: #333;
+			margin-bottom: 10px;
+			font-size: 28px;
+		}
+
+		.subtitle {
+			color: #666;
+			margin-bottom: 30px;
+			font-size: 14px;
+		}
+
+		.upload-area {
+			border: 2px dashed #ccc;
+			border-radius: 8px;
+			padding: 30px;
+			text-align: center;
+			cursor: pointer;
+			transition: all 0.3s;
+			margin-bottom: 30px;
+		}
+
+		.upload-area:hover {
+			border-color: #667eea;
+			background: #f8f9ff;
+		}
+
+		.upload-area.dragover {
+			border-color: #667eea;
+			background: #f0f2ff;
+		}
+
+		.upload-area input {
+			display: none;
+		}
+
+		.upload-text {
+			color: #666;
+			font-size: 16px;
+		}
+
+		.upload-text strong {
+			color: #667eea;
+		}
+
+		.results {
+			display: grid;
+			grid-template-columns: 1fr 1fr;
+			gap: 30px;
+			margin-top: 30px;
+		}
+
+		.results.single {
+			grid-template-columns: 1fr;
+		}
+
+		.canvas-container {
+			position: relative;
+			background: #f5f5f5;
+			border-radius: 8px;
+			overflow: hidden;
+		}
+
+		canvas {
+			display: block;
+			width: 100%;
+			height: auto;
+		}
+
+		.metrics {
+			background: #f9f9f9;
+			border-radius: 8px;
+			padding: 20px;
+			border-left: 4px solid #667eea;
+		}
+
+		.metric-row {
+			display: flex;
+			justify-content: space-between;
+			padding: 10px 0;
+			border-bottom: 1px solid #eee;
+		}
+
+		.metric-row:last-child {
+			border-bottom: none;
+		}
+
+		.metric-label {
+			color: #666;
+			font-weight: 500;
+		}
+
+		.metric-value {
+			color: #333;
+			font-weight: 600;
+		}
+
+		.faces-list {
+			margin-top: 20px;
+		}
+
+		.faces-list h3 {
+			color: #333;
+			font-size: 16px;
+			margin-bottom: 15px;
+		}
+
+		.face-item {
+			background: white;
+			border: 1px solid #ddd;
+			border-radius: 6px;
+			padding: 12px;
+			margin-bottom: 10px;
+		}
+
+		.face-header {
+			display: flex;
+			justify-content: space-between;
+			margin-bottom: 8px;
+		}
+
+		.face-label {
+			font-weight: 600;
+			color: #333;
+		}
+
+		.confidence {
+			background: #667eea;
+			color: white;
+			padding: 2px 8px;
+			border-radius: 4px;
+			font-size: 12px;
+		}
+
+		.embedding-preview {
+			font-size: 12px;
+			color: #999;
+			font-family: monospace;
+			word-break: break-all;
+		}
+
+		.loading {
+			text-align: center;
+			color: #667eea;
+			font-size: 14px;
+		}
+
+		.spinner {
+			display: inline-block;
+			width: 12px;
+			height: 12px;
+			border: 2px solid #ddd;
+			border-top: 2px solid #667eea;
+			border-radius: 50%;
+			animation: spin 0.8s linear infinite;
+			margin-right: 8px;
+			vertical-align: middle;
+		}
+
+		@keyframes spin {
+			to { transform: rotate(360deg); }
+		}
+
+		.error {
+			background: #fee;
+			color: #c33;
+			padding: 15px;
+			border-radius: 6px;
+			margin-top: 20px;
+			border-left: 4px solid #c33;
+		}
+
+		.success {
+			background: #efe;
+			color: #3a3;
+			padding: 15px;
+			border-radius: 6px;
+			margin-top: 20px;
+			border-left: 4px solid #3a3;
+		}
+
+		@media (max-width: 600px) {
+			.container {
+				padding: 20px;
+			}
+
+			.results {
+				grid-template-columns: 1fr;
+				gap: 20px;
+			}
+
+			h1 {
+				font-size: 22px;
+			}
+		}
+	</style>
+</head>
+<body>
+	<div class="container">
+		<h1>🎥 VideoDisco</h1>
+		<p class="subtitle">Face Detection & Embedding</p>
+
+		<div class="upload-area" id="uploadArea">
+			<input type="file" id="imageInput" accept="image/*">
+			<div class="upload-text">
+				<p>📸 Click or drag image here</p>
+				<p style="font-size: 12px; color: #999; margin-top: 8px;">JPG, PNG</p>
+			</div>
+		</div>
+
+		<div id="resultsContainer"></div>
+	</div>
+
+	<script>
+		const API_URL = 'http://localhost:8080';
+		const uploadArea = document.getElementById('uploadArea');
+		const imageInput = document.getElementById('imageInput');
+		const resultsContainer = document.getElementById('resultsContainer');
+
+		uploadArea.addEventListener('click', () => imageInput.click());
+		uploadArea.addEventListener('dragover', (e) => {
+			e.preventDefault();
+			uploadArea.classList.add('dragover');
+		});
+		uploadArea.addEventListener('dragleave', () => {
+			uploadArea.classList.remove('dragover');
+		});
+		uploadArea.addEventListener('drop', (e) => {
+			e.preventDefault();
+			uploadArea.classList.remove('dragover');
+			const files = e.dataTransfer.files;
+			if (files.length > 0) {
+				imageInput.files = files;
+				processImage();
+			}
+		});
+
+		imageInput.addEventListener('change', processImage);
+
+		function processImage() {
+			const file = imageInput.files[0];
+			if (!file) return;
+
+			resultsContainer.innerHTML = `
+				<div class="loading">
+					<span class="spinner"></span>
+					Processing image...
+				</div>
+			`;
+
+			const formData = new FormData();
+			formData.append('image', file);
+
+			fetch(`${API_URL}/face/process`, {
+				method: 'POST',
+				body: formData
+			})
+				.then(res => res.json())
+				.then(data => {
+					if (data.error) throw new Error(data.error);
+					displayResults(file, data);
+				})
+				.catch(err => {
+					resultsContainer.innerHTML = `
+						<div class="error">
+							Error: ${err.message}<br>
+							<small>Make sure the backend is running on ${API_URL}</small>
+						</div>
+					`;
+				});
+		}
+
+		function displayResults(file, data) {
+			const reader = new FileReader();
+			reader.onload = (e) => {
+				const img = new Image();
+				img.onload = () => {
+					const faces = data.faces || [];
+					const latency = data.latency_ms || 0;
+
+					let html = `
+						<div class="results ${faces.length > 0 ? '' : 'single'}">
+							<div class="canvas-container">
+								<canvas id="canvas"></canvas>
+							</div>
+							<div class="metrics">
+								<div class="metric-row">
+									<span class="metric-label">Faces Detected</span>
+									<span class="metric-value">${faces.length}</span>
+								</div>
+								<div class="metric-row">
+									<span class="metric-label">Latency</span>
+									<span class="metric-value">${latency.toFixed(2)}ms</span>
+								</div>
+								<div class="metric-row">
+									<span class="metric-label">Image</span>
+									<span class="metric-value">${file.name}</span>
+								</div>
+								<div class="metric-row">
+									<span class="metric-label">Model</span>
+									<span class="metric-value">YuNet + MobileFaceNet</span>
+								</div>
+					`;
+
+					if (faces.length > 0) {
+						html += `
+							<div class="faces-list">
+								<h3>Detected Faces</h3>
+						`;
+
+						faces.forEach((face, idx) => {
+							const conf = (face.score * 100).toFixed(1);
+							const embPreview = face.embedding ? face.embedding.slice(0, 3).map(v => v.toFixed(3)).join(', ') + '...' : 'N/A';
+							html += `
+								<div class="face-item">
+									<div class="face-header">
+										<span class="face-label">Face ${idx + 1}</span>
+										<span class="confidence">${conf}%</span>
+									</div>
+									<div style="font-size: 12px; color: #666;">
+										Box: (${Math.round(face.x1)}, ${Math.round(face.y1)}) → (${Math.round(face.x2)}, ${Math.round(face.y2)})
+									</div>
+									<div class="embedding-preview">
+										Embedding: [${embPreview}]
+									</div>
+								</div>
+							`;
+						});
+
+						html += `</div>`;
+					}
+
+					html += `
+							</div>
+						</div>
+					`;
+
+					resultsContainer.innerHTML = html;
+
+					const canvas = document.getElementById('canvas');
+					const ctx = canvas.getContext('2d');
+					canvas.width = img.width;
+					canvas.height = img.height;
+
+					ctx.drawImage(img, 0, 0);
+
+					faces.forEach((face, idx) => {
+						const x1 = face.x1;
+						const y1 = face.y1;
+						const x2 = face.x2;
+						const y2 = face.y2;
+						const conf = (face.score * 100).toFixed(1);
+
+						ctx.strokeStyle = '#00ff00';
+						ctx.lineWidth = 2;
+						ctx.strokeRect(x1, y1, x2 - x1, y2 - y1);
+
+						ctx.fillStyle = '#00ff00';
+						ctx.font = '14px sans-serif';
+						ctx.fillText(`Face ${idx + 1} (${conf}%)`, x1, y1 - 5);
+					});
+				};
+				img.src = e.target.result;
+			};
+			reader.readAsDataURL(file);
+		}
+	</script>
+</body>
+</html>

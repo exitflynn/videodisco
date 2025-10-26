@@ -9,20 +9,20 @@ import (
 )
 
 type Face struct {
-	X1        float32 `json:"x1"`
-	Y1        float32 `json:"y1"`
-	X2        float32 `json:"x2"`
-	Y2        float32 `json:"y2"`
-	Score     float32 `json:"score"`
+	X1        float32   `json:"x1"`
+	Y1        float32   `json:"y1"`
+	X2        float32   `json:"x2"`
+	Y2        float32   `json:"y2"`
+	Score     float32   `json:"score"`
 	Embedding []float32 `json:"embedding,omitempty"`
 }
 
 type FaceDetector struct {
-	session       *ort.Session[float32]
-	inputShape    ort.Shape
-	outputShape   ort.Shape
-	inputTensor   *ort.Tensor[float32]
-	outputTensor  *ort.Tensor[float32]
+	session      *ort.Session[float32]
+	inputShape   ort.Shape
+	outputShape  ort.Shape
+	inputTensor  *ort.Tensor[float32]
+	outputTensor *ort.Tensor[float32]
 }
 
 func NewFaceDetector(modelPath string) (*FaceDetector, error) {
