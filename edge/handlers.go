@@ -1,6 +1,8 @@
 package main
 
 import (
+	"bytes"
+	"encoding/json"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -42,6 +44,8 @@ func handleDetect(c *gin.Context) {
 
 	metrics := computeMetrics(file.Filename, detections, latency)
 	lastMetrics = metrics
+
+	go logToMLflow(metrics)
 
 	logx.Infof("detection complete: %d objects, %.2fms", len(detections), latency)
 
@@ -93,4 +97,25 @@ func computeMetrics(imageName string, detections []Detection, latencyMs float64)
 	}
 
 	return metrics
+}
+
+func logToMLflow(metrics *Metrics) {
+	payload := map[string]interface{}{
+		"image_name":    metrics.ImageName,
+		"detections":    metrics.Detections,
+		"latency_ms":    metrics.LatencyMs,
+		"model_version": "yolov8n",
+	}
+
+	body, _ := json.Marshal(payload)
+	resp, err := http.Post("http://127.0.0.1:5001/log", "application/json", bytes.NewReader(body))
+	if err != nil {
+		logx.Errorf("failed to log to mlflow: %v", err)
+		return
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		logx.Infof("mlflow logging returned status: %d", resp.StatusCode)
+	}
 }

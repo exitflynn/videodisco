@@ -15,15 +15,15 @@ type Detection struct {
 }
 
 type Metrics struct {
-	ImageName        string        `json:"image_name"`
-	NumDetections    int           `json:"num_detections"`
-	LatencyMs        float64       `json:"latency_ms"`
-	AvgConfidence    float32       `json:"avg_confidence"`
-	MaxConfidence    float32       `json:"max_confidence"`
-	MinConfidence    float32       `json:"min_confidence"`
-	PreprocessTimeMs float64       `json:"preprocess_time_ms"`
-	InferenceTimeMs  float64       `json:"inference_time_ms"`
-	Detections       []Detection   `json:"detections"`
+	ImageName        string      `json:"image_name"`
+	NumDetections    int         `json:"num_detections"`
+	LatencyMs        float64     `json:"latency_ms"`
+	AvgConfidence    float32     `json:"avg_confidence"`
+	MaxConfidence    float32     `json:"max_confidence"`
+	MinConfidence    float32     `json:"min_confidence"`
+	PreprocessTimeMs float64     `json:"preprocess_time_ms"`
+	InferenceTimeMs  float64     `json:"inference_time_ms"`
+	Detections       []Detection `json:"detections"`
 }
 
 type Detector struct {
