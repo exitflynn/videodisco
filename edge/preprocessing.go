@@ -1,30 +1,37 @@
 package main
 
 import (
+	"bytes"
 	"image"
+	_ "image/gif"
 	_ "image/jpeg"
 	_ "image/png"
 	"io"
 )
 
 func preprocessImage(reader io.Reader) ([]float32, error) {
-	img, _, err := image.Decode(reader)
+	imgData, err := io.ReadAll(reader)
+	if err != nil {
+		return nil, err
+	}
+
+	img, _, err := image.Decode(bytes.NewReader(imgData))
 	if err != nil {
 		return nil, err
 	}
 
 	resized := resizeImage(img, 640, 640)
-	data := imageToTensor(resized)
+	tensor := imageToTensor(resized)
 	
-	return data, nil
+	return tensor, nil
 }
 
 func resizeImage(img image.Image, width, height int) image.Image {
 	bounds := img.Bounds()
 	srcW, srcH := bounds.Dx(), bounds.Dy()
-	
+
 	dst := image.NewRGBA(image.Rect(0, 0, width, height))
-	
+
 	for y := 0; y < height; y++ {
 		for x := 0; x < width; x++ {
 			srcX := x * srcW / width
@@ -32,26 +39,26 @@ func resizeImage(img image.Image, width, height int) image.Image {
 			dst.Set(x, y, img.At(bounds.Min.X+srcX, bounds.Min.Y+srcY))
 		}
 	}
-	
+
 	return dst
 }
 
 func imageToTensor(img image.Image) []float32 {
 	bounds := img.Bounds()
 	width, height := bounds.Dx(), bounds.Dy()
-	
+
 	data := make([]float32, 3*width*height)
-	
+
 	for y := 0; y < height; y++ {
 		for x := 0; x < width; x++ {
 			r, g, b, _ := img.At(bounds.Min.X+x, bounds.Min.Y+y).RGBA()
-			
+
 			data[0*width*height+y*width+x] = float32(r>>8) / 255.0
 			data[1*width*height+y*width+x] = float32(g>>8) / 255.0
 			data[2*width*height+y*width+x] = float32(b>>8) / 255.0
 		}
 	}
-	
+
 	return data
 }
 
