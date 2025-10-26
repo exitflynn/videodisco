@@ -8,16 +8,20 @@ import (
 )
 
 const (
-	defaultModelPath = "../models/yolov8n.onnx"
-	defaultPort      = ":8080"
+	defaultFaceDetectorPath = "../models/yunet.onnx"
+	defaultFaceEmbedderPath = "../models/mobilefacenet.onnx"
+	defaultPort             = ":8080"
 )
 
-var detector *Detector
-
 func main() {
-	modelPath := os.Getenv("MODEL_PATH")
-	if modelPath == "" {
-		modelPath = defaultModelPath
+	faceDetectorPath := os.Getenv("FACE_DETECTOR_MODEL")
+	if faceDetectorPath == "" {
+		faceDetectorPath = defaultFaceDetectorPath
+	}
+
+	faceEmbedderPath := os.Getenv("FACE_EMBEDDER_MODEL")
+	if faceEmbedderPath == "" {
+		faceEmbedderPath = defaultFaceEmbedderPath
 	}
 
 	port := os.Getenv("PORT")
@@ -25,23 +29,30 @@ func main() {
 		port = defaultPort
 	}
 
-	logx.Infof("loading model: %s", modelPath)
-
+	logx.Infof("loading face detector: %s", faceDetectorPath)
 	var err error
-	detector, err = NewDetector(modelPath)
+	faceDetector, err = NewFaceDetector(faceDetectorPath)
 	if err != nil {
-		logx.Severef("failed to load model: %v", err)
+		logx.Severef("failed to load face detector: %v", err)
 	}
-	defer detector.Close()
+	defer faceDetector.Close()
 
-	logx.Info("model loaded successfully")
+	logx.Infof("loading face embedder: %s", faceEmbedderPath)
+	faceEmbedder, err = NewFaceEmbedder(faceEmbedderPath)
+	if err != nil {
+		logx.Severef("failed to load face embedder: %v", err)
+	}
+	defer faceEmbedder.Close()
+
+	logx.Info("models loaded successfully")
 
 	gin.SetMode(gin.ReleaseMode)
 	router := gin.Default()
 
-	router.POST("/detect", handleDetect)
+	router.POST("/face/process", handleFaceProcess)
+	router.POST("/face/embed", handleFaceEmbed)
 	router.GET("/health", handleHealth)
-	router.GET("/metrics", handleMetrics)
+	router.GET("/metrics", handleFaceMetrics)
 
 	logx.Infof("server starting on %s", port)
 	if err := router.Run(port); err != nil {
