@@ -36,7 +36,7 @@ func preprocessImage(reader io.Reader) ([]float32, error) {
 
 	resized := resizeImage(img, 640, 640)
 	tensor := imageToTensor(resized)
-	
+
 	return tensor, nil
 }
 

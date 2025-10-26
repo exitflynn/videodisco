@@ -41,6 +41,7 @@ func main() {
 
 	router.POST("/detect", handleDetect)
 	router.GET("/health", handleHealth)
+	router.GET("/metrics", handleMetrics)
 
 	logx.Infof("server starting on %s", port)
 	if err := router.Run(port); err != nil {

@@ -7,6 +7,8 @@ import (
 	"github.com/zeromicro/go-zero/core/logx"
 )
 
+var lastMetrics *Metrics
+
 func handleDetect(c *gin.Context) {
 	file, err := c.FormFile("image")
 	if err != nil {
@@ -38,14 +40,57 @@ func handleDetect(c *gin.Context) {
 		return
 	}
 
+	metrics := computeMetrics(file.Filename, detections, latency)
+	lastMetrics = metrics
+
 	logx.Infof("detection complete: %d objects, %.2fms", len(detections), latency)
 
 	c.JSON(http.StatusOK, gin.H{
 		"detections": detections,
 		"latency_ms": latency,
+		"metrics":    metrics,
 	})
 }
 
 func handleHealth(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"status": "ok"})
+}
+
+func handleMetrics(c *gin.Context) {
+	if lastMetrics == nil {
+		c.JSON(http.StatusOK, gin.H{"metrics": nil, "message": "no detections yet"})
+		return
+	}
+	c.JSON(http.StatusOK, lastMetrics)
+}
+
+func computeMetrics(imageName string, detections []Detection, latencyMs float64) *Metrics {
+	metrics := &Metrics{
+		ImageName:     imageName,
+		NumDetections: len(detections),
+		LatencyMs:     latencyMs,
+		Detections:    detections,
+	}
+
+	if len(detections) > 0 {
+		var sum float32
+		minConf := float32(1.0)
+		maxConf := float32(0.0)
+
+		for _, d := range detections {
+			sum += d.Confidence
+			if d.Confidence < minConf {
+				minConf = d.Confidence
+			}
+			if d.Confidence > maxConf {
+				maxConf = d.Confidence
+			}
+		}
+
+		metrics.AvgConfidence = sum / float32(len(detections))
+		metrics.MinConfidence = minConf
+		metrics.MaxConfidence = maxConf
+	}
+
+	return metrics
 }
