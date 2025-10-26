@@ -2,28 +2,49 @@ package main
 
 import (
 	"bytes"
+	"fmt"
 	"image"
 	_ "image/gif"
 	_ "image/jpeg"
 	_ "image/png"
 	"io"
+
+	"github.com/zeromicro/go-zero/core/logx"
 )
 
 func preprocessImage(reader io.Reader) ([]float32, error) {
 	imgData, err := io.ReadAll(reader)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to read image data: %w", err)
 	}
 
-	img, _, err := image.Decode(bytes.NewReader(imgData))
-	if err != nil {
-		return nil, err
+	logx.Infof("read image data: %d bytes", len(imgData))
+
+	if len(imgData) == 0 {
+		return nil, fmt.Errorf("empty image data")
 	}
+
+	img, format, err := image.Decode(bytes.NewReader(imgData))
+	if err != nil {
+		logx.Errorf("image decode failed: %v, data_len: %d, first_bytes: %x",
+			err, len(imgData), imgData[:min(16, len(imgData))])
+		return nil, fmt.Errorf("failed to decode image: %w", err)
+	}
+
+	logx.Infof("image decoded: format=%s, size=%dx%d",
+		format, img.Bounds().Dx(), img.Bounds().Dy())
 
 	resized := resizeImage(img, 640, 640)
 	tensor := imageToTensor(resized)
 	
 	return tensor, nil
+}
+
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
 }
 
 func resizeImage(img image.Image, width, height int) image.Image {

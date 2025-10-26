@@ -1,10 +1,10 @@
 package main
 
 import (
-	"log"
 	"os"
 
 	"github.com/gin-gonic/gin"
+	"github.com/zeromicro/go-zero/core/logx"
 )
 
 const (
@@ -25,12 +25,16 @@ func main() {
 		port = defaultPort
 	}
 
+	logx.Infof("loading model: %s", modelPath)
+
 	var err error
 	detector, err = NewDetector(modelPath)
 	if err != nil {
-		log.Fatalf("failed to load model: %v", err)
+		logx.Severef("failed to load model: %v", err)
 	}
 	defer detector.Close()
+
+	logx.Info("model loaded successfully")
 
 	gin.SetMode(gin.ReleaseMode)
 	router := gin.Default()
@@ -38,8 +42,8 @@ func main() {
 	router.POST("/detect", handleDetect)
 	router.GET("/health", handleHealth)
 
-	log.Printf("server starting on %s", port)
+	logx.Infof("server starting on %s", port)
 	if err := router.Run(port); err != nil {
-		log.Fatalf("server error: %v", err)
+		logx.Severef("server error: %v", err)
 	}
 }
