@@ -6,7 +6,6 @@ import (
 	"time"
 
 	ort "github.com/yalue/onnxruntime_go"
-	"gocv.io/x/gocv"
 )
 
 type Detection struct {
@@ -16,10 +15,10 @@ type Detection struct {
 }
 
 type Detector struct {
-	session     *ort.AdvancedSession
-	inputShape  ort.Shape
-	inputName   string
-	outputNames []string
+	session      *ort.Session[float32]
+	inputTensor  *ort.Tensor[float32]
+	outputTensor *ort.Tensor[float32]
+	inputShape   ort.Shape
 }
 
 func NewDetector(modelPath string) (*Detector, error) {
@@ -37,68 +36,50 @@ func NewDetector(modelPath string) (*Detector, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to create input tensor: %w", err)
 	}
-	defer inputTensor.Destroy()
 
 	outputTensor, err := ort.NewEmptyTensor[float32](outputShape)
 	if err != nil {
+		inputTensor.Destroy()
 		return nil, fmt.Errorf("failed to create output tensor: %w", err)
 	}
-	defer outputTensor.Destroy()
 
-	session, err := ort.NewAdvancedSession(modelPath,
+	session, err := ort.NewSession[float32](
+		modelPath,
 		[]string{"images"},
 		[]string{"output0"},
-		[]ort.ArbitraryTensor{inputTensor},
-		[]ort.ArbitraryTensor{outputTensor},
-		nil,
+		[]*ort.Tensor[float32]{inputTensor},
+		[]*ort.Tensor[float32]{outputTensor},
 	)
 	if err != nil {
+		inputTensor.Destroy()
+		outputTensor.Destroy()
 		return nil, fmt.Errorf("failed to create session: %w", err)
 	}
 
 	return &Detector{
-		session:     session,
-		inputShape:  inputShape,
-		inputName:   "images",
-		outputNames: []string{"output0"},
+		session:      session,
+		inputTensor:  inputTensor,
+		outputTensor: outputTensor,
+		inputShape:   inputShape,
 	}, nil
 }
 
 func (d *Detector) Detect(imageReader io.Reader) ([]Detection, float64, error) {
 	start := time.Now()
 
-	img, err := gocv.IMDecode(imageReader, gocv.IMReadColor)
-	if err != nil {
-		return nil, 0, fmt.Errorf("failed to decode image: %w", err)
-	}
-	defer img.Close()
-
-	inputData, err := preprocessImage(img)
+	inputData, err := preprocessImage(imageReader)
 	if err != nil {
 		return nil, 0, fmt.Errorf("preprocessing failed: %w", err)
 	}
 
-	inputTensor, err := ort.NewTensor(d.inputShape, inputData)
-	if err != nil {
-		return nil, 0, fmt.Errorf("failed to create tensor: %w", err)
-	}
-	defer inputTensor.Destroy()
+	copy(d.inputTensor.GetData(), inputData)
 
-	outputTensor, err := ort.NewEmptyTensor[float32](ort.NewShape(1, 84, 8400))
-	if err != nil {
-		return nil, 0, fmt.Errorf("failed to create output tensor: %w", err)
-	}
-	defer outputTensor.Destroy()
-
-	err = d.session.Run(
-		[]ort.ArbitraryTensor{inputTensor},
-		[]ort.ArbitraryTensor{outputTensor},
-	)
+	err = d.session.Run()
 	if err != nil {
 		return nil, 0, fmt.Errorf("inference failed: %w", err)
 	}
 
-	output := outputTensor.GetData()
+	output := d.outputTensor.GetData()
 	detections := postprocess(output, 0.5)
 
 	latency := time.Since(start).Seconds() * 1000

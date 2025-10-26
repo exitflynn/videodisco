@@ -1,36 +1,58 @@
 package main
 
 import (
-	"gocv.io/x/gocv"
 	"image"
+	_ "image/jpeg"
+	_ "image/png"
+	"io"
 )
 
-func preprocessImage(img gocv.Mat) ([]float32, error) {
-	resized := gocv.NewMat()
-	defer resized.Close()
-
-	size := image.Point{X: 640, Y: 640}
-	gocv.Resize(img, &resized, size, 0, 0, gocv.InterpolationLinear)
-
-	gocv.CvtColor(resized, &resized, gocv.ColorBGRToRGB)
-
-	normalized := gocv.NewMat()
-	defer normalized.Close()
-
-	resized.ConvertTo(&normalized, gocv.MatTypeCV32F)
-	normalized.DivideFloat(255.0)
-
-	data := make([]float32, 3*640*640)
-	for c := 0; c < 3; c++ {
-		for y := 0; y < 640; y++ {
-			for x := 0; x < 640; x++ {
-				val := normalized.GetVecfAt(y, x)
-				data[c*640*640+y*640+x] = val[c]
-			}
-		}
+func preprocessImage(reader io.Reader) ([]float32, error) {
+	img, _, err := image.Decode(reader)
+	if err != nil {
+		return nil, err
 	}
 
+	resized := resizeImage(img, 640, 640)
+	data := imageToTensor(resized)
+	
 	return data, nil
+}
+
+func resizeImage(img image.Image, width, height int) image.Image {
+	bounds := img.Bounds()
+	srcW, srcH := bounds.Dx(), bounds.Dy()
+	
+	dst := image.NewRGBA(image.Rect(0, 0, width, height))
+	
+	for y := 0; y < height; y++ {
+		for x := 0; x < width; x++ {
+			srcX := x * srcW / width
+			srcY := y * srcH / height
+			dst.Set(x, y, img.At(bounds.Min.X+srcX, bounds.Min.Y+srcY))
+		}
+	}
+	
+	return dst
+}
+
+func imageToTensor(img image.Image) []float32 {
+	bounds := img.Bounds()
+	width, height := bounds.Dx(), bounds.Dy()
+	
+	data := make([]float32, 3*width*height)
+	
+	for y := 0; y < height; y++ {
+		for x := 0; x < width; x++ {
+			r, g, b, _ := img.At(bounds.Min.X+x, bounds.Min.Y+y).RGBA()
+			
+			data[0*width*height+y*width+x] = float32(r>>8) / 255.0
+			data[1*width*height+y*width+x] = float32(g>>8) / 255.0
+			data[2*width*height+y*width+x] = float32(b>>8) / 255.0
+		}
+	}
+	
+	return data
 }
 
 func postprocess(output []float32, threshold float32) []Detection {
@@ -71,4 +93,3 @@ func postprocess(output []float32, threshold float32) []Detection {
 
 	return detections
 }
-
