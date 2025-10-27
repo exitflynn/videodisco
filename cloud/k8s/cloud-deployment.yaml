@@ -1,0 +1,36 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cloud-clustering
+  namespace: videodisco
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: cloud-clustering
+  template:
+    metadata:
+      labels:
+        app: cloud-clustering
+    spec:
+      containers:
+      - name: cloud
+        image: videodisco-cloud:latest
+        imagePullPolicy: Never
+        ports:
+        - containerPort: 5002
+        envFrom:
+        - configMapRef:
+            name: cloud-config
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 5002
+          initialDelaySeconds: 10
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 5002
+          initialDelaySeconds: 5
+          periodSeconds: 5

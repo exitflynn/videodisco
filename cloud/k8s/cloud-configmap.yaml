@@ -1,0 +1,8 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: cloud-config
+  namespace: videodisco
+data:
+  DATABASE_URL: postgresql://postgres:postgres@postgres:5432/videodisco_cloud
+  DISTANCE_THRESHOLD: "0.6"

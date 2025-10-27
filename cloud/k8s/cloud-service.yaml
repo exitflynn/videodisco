@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: cloud-clustering
+  namespace: videodisco
+spec:
+  selector:
+    app: cloud-clustering
+  ports:
+  - protocol: TCP
+    port: 5002
+    targetPort: 5002
+  type: NodePort
