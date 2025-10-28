@@ -131,10 +131,6 @@ func (fd *FaceDetector) Close() {
 func decodeFaces(output []float32, confThreshold float32) []Face {
 	faces := []Face{}
 
-	// YuNet outputs are flattened as: each detection has center_x, center_y, w, h as values
-	// With confidence threshold applied
-	// For an Nx14 or Nx4 output format from YuNet
-
 	stride := 14
 	numDetections := len(output) / stride
 
@@ -154,19 +150,17 @@ func decodeFaces(output []float32, confThreshold float32) []Face {
 			continue
 		}
 
-		// Convert center + size to corner coordinates
 		x1 := x - w/2
 		y1 := y - h/2
 		x2 := x + w/2
 		y2 := y + h/2
 
-		// Clamp to valid range [0, 640]
 		x1 = max(0, min(640, x1))
 		y1 = max(0, min(640, y1))
 		x2 = max(0, min(640, x2))
 		y2 = max(0, min(640, y2))
 
-		if x2-x1 > 10 && y2-y1 > 10 { // Filter tiny boxes
+		if x2-x1 > 10 && y2-y1 > 10 {
 			faces = append(faces, Face{
 				X1:    x1,
 				Y1:    y1,

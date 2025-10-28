@@ -1,20 +1,33 @@
 import numpy as np
-from sklearn.metrics.pairwise import cosine_distances
 import uuid
 
 class FaceClustering:
 	def __init__(self, distance_threshold=0.6):
 		self.distance_threshold = distance_threshold
 	
+	def cosine_distance(self, emb1, emb2):
+		emb1 = np.array(emb1, dtype=np.float32)
+		emb2 = np.array(emb2, dtype=np.float32)
+		
+		dot_product = np.dot(emb1, emb2)
+		norm1 = np.linalg.norm(emb1)
+		norm2 = np.linalg.norm(emb2)
+		
+		if norm1 == 0 or norm2 == 0:
+			return 1.0
+		
+		cosine_sim = dot_product / (norm1 * norm2)
+		return 1.0 - cosine_sim
+	
 	def find_cluster(self, embedding, cluster_embeddings):
 		if not cluster_embeddings:
 			return None
 		
-		emb_array = np.array(embedding).reshape(1, -1)
-		cluster_array = np.array(cluster_embeddings).reshape(len(cluster_embeddings), -1)
-		
-		distances = cosine_distances(emb_array, cluster_array)[0]
-		min_distance = np.min(distances)
+		min_distance = float('inf')
+		for cluster_emb in cluster_embeddings:
+			dist = self.cosine_distance(embedding, cluster_emb)
+			if dist < min_distance:
+				min_distance = dist
 		
 		if min_distance < self.distance_threshold:
 			return min_distance

@@ -7,7 +7,6 @@ from sqlalchemy.orm import sessionmaker
 from models import Base, FaceGroup, Embedding
 from clustering import FaceClustering
 import uuid
-import struct
 
 app = FastAPI(title="VideoDisco Cloud Clustering")
 
@@ -43,16 +42,13 @@ def add_to_cluster(request: ClusterRequest):
 			if not group_embeddings:
 				continue
 			
-			emb_test = emb_array.reshape(1, -1)
-			group_arr = np.array(group_embeddings)
-			distances = cosine_distances(emb_test, group_arr)[0]
-			min_d = np.min(distances)
-			
-			if min_d < clusterer.distance_threshold and min_d < min_dist:
-				min_dist = min_d
-				assigned_group = group
+			for group_emb in group_embeddings:
+				dist = clusterer.cosine_distance(emb_array, group_emb)
+				if dist < min_dist:
+					min_dist = dist
+					assigned_group = group
 		
-		if assigned_group:
+		if assigned_group and min_dist < clusterer.distance_threshold:
 			group_id = assigned_group.group_id
 			is_new = False
 		else:
@@ -108,5 +104,3 @@ def list_clusters():
 if __name__ == "__main__":
 	import uvicorn
 	uvicorn.run(app, host="127.0.0.1", port=5002)
-
-from sklearn.metrics.pairwise import cosine_distances
